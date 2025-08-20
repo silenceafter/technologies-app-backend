@@ -60,7 +60,7 @@ class TechnologyService {
         $this->userId = $userId;
     }
 
-    // ✅ Создание технологии
+    // Создание технологии
     public function createTechnology($technology) {
         try {
             // 1. Генерация кода
@@ -125,7 +125,7 @@ class TechnologyService {
         }
     }
 
-    // ✅ Обновление технологии
+    // Обновление технологии
     public function updateTechnology($technology) {
         try {
             $proxyId = $technology['proxy']['proxyId'];
@@ -157,7 +157,7 @@ class TechnologyService {
         }
     }
 
-    // ✅ Удаление технологии
+    // Удаление технологии
     public function deleteTechnology($technology) {
         try {
             $proxyId = $technology['proxy']['proxyId'];
@@ -181,7 +181,7 @@ class TechnologyService {
         }
     }
 
-    // ✅ Создание операции
+    // Создание операции
     private function createOperation($operation, $drawingsTechnologiesId) {
         try {
             // 1. Получаем operation_id
@@ -281,7 +281,7 @@ class TechnologyService {
         }
     }
 
-    // ✅ Обновление операции
+    // Обновление операции
     private function updateOperation($operation, $technology) {
         try {
             $proxyTOId = $operation['proxy']['proxyTOId'];
@@ -403,25 +403,80 @@ class TechnologyService {
                 $stmt->execute([...$stmtParams, $technologiesOperationsId]);
             }
 
-            // 5. Обновление material_code_id (materialCode)
-            /*if (isset($changedValues['materialCode'])) {
-                $value = $changedValues['materialCode'];
-                $newMaterialId = OgtHelper::GetMaterialId($this->pdo, $value['code'], $value['name']);
-
-                if ($newMaterialId) {
-                    $stmt = $this->pdo->prepare("UPDATE ogt.operations_materials SET material_code_id = ? WHERE technologies_operations_id = ?");
-                    $stmt->execute([$newMaterialId, $technologiesOperationsId]);
+            // 4.5. Обработка материалов
+            $operationFormValues = $operation['content']['formValues'];
+            $formMaterials = $operationFormValues['materialCode'] ?? [];
+            
+            // Получаем текущие материалы из БД (только активные)
+            $currentMaterialsStmt = $this->pdo->prepare("
+                SELECT om.id, om.material_code_id, m.code, m.name, om.material_mass 
+                FROM ogt.operations_materials om
+                JOIN ogt.materials m ON om.material_code_id = m.id
+                WHERE om.technologies_operations_id = ? AND om.is_deleted = false
+            ");
+            $currentMaterialsStmt->execute([$technologiesOperationsId]);
+            $currentMaterials = $currentMaterialsStmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Создаем индекс текущих материалов по комбинации кода и наименования
+            $currentMaterialsByCodeName = [];
+            foreach ($currentMaterials as $material) {
+                $key = strtolower(trim($material['code'])) . '|' . strtolower(trim($material['name']));
+                $currentMaterialsByCodeName[$key] = $material;
+            }
+            
+            // Обрабатываем материалы из formValues
+            foreach ($formMaterials as $material) {
+                // Пропускаем материалы без кода или названия
+                if (empty($material['code']) || empty($material['name'])) {
+                    continue;
+                }                
+                //
+                $key = strtolower(trim($material['code'])) . '|' . strtolower(trim($material['name']));                
+                if (isset($currentMaterialsByCodeName[$key])) {
+                    // Материал уже существует, проверяем нужно ли обновить массу
+                    $currentMaterial = $currentMaterialsByCodeName[$key];
+                    $newMass = $material['mass'] ?? 0.0;
+                    
+                    // Если масса изменилась, обновляем
+                    if (abs(floatval($currentMaterial['material_mass']) - floatval($newMass)) > 0.0001) {
+                        $updateStmt = $this->pdo->prepare("
+                            UPDATE ogt.operations_materials 
+                            SET material_mass = ? 
+                            WHERE id = ?
+                        ");
+                        $updateStmt->execute([$newMass, $currentMaterial['id']]);
+                    }
+                    
+                    // Удаляем из индекса, чтобы потом определить удаленные материалы
+                    unset($currentMaterialsByCodeName[$key]);
+                } else {
+                    // Новый материал, добавляем
+                    $materialCodeId = OgtHelper::GetMaterialId($this->pdo, $material['code'], $material['name']);
+                    
+                    if ($materialCodeId) {
+                        $insertStmt = $this->pdo->prepare("
+                            INSERT INTO ogt.operations_materials 
+                            (technologies_operations_id, material_code_id, material_mass, is_deleted)
+                            VALUES (?, ?, ?, false)
+                        ");
+                        $insertStmt->execute([
+                            $technologiesOperationsId,
+                            $materialCodeId,
+                            $material['mass'] ?? 0.0
+                        ]);
+                    }
                 }
             }
-
-            // 5. Обновление параметров material
-            $stmtParts = [];
-            $stmtParams = [];
-
-            if (isset($changedValues['grade'])) {
-                $stmtParts[] = "grade = ?";
-                $stmtParams[] = $changedValues['grade'];
-            }*/
+            
+            // Обрабатываем удаленные материалы
+            foreach ($currentMaterialsByCodeName as $material) {
+                $updateStmt = $this->pdo->prepare("
+                    UPDATE ogt.operations_materials 
+                    SET is_deleted = true 
+                    WHERE id = ?
+                ");
+                $updateStmt->execute([$material['id']]);
+            }
 
             // 5. Обновление даты
             $stmt = $this->pdo->prepare("
@@ -440,7 +495,7 @@ class TechnologyService {
         }
     }
 
-    // ✅ Удаление операции
+    // Удаление операции
     private function deleteOperation($operation, $technology) {
         try {
             $proxyTOId = $operation['proxy']['proxyTOId'];
@@ -450,11 +505,14 @@ class TechnologyService {
             $technologiesOperationsId = SystemHelper::decrypt($proxyTOId, $keyHex, $ivHex);
             $drawingsTechnologiesId = SystemHelper::decrypt($proxyDTId, $keyHex, $ivHex);
 
-            $stmt = $this->pdo->prepare("UPDATE ogt.technologies_operations SET is_deleted = true WHERE id = ?");
-            $stmt->execute([$technologiesOperationsId]);
-
+            //запросы
+            $this->pdo->prepare("UPDATE ogt.technologies_operations SET is_deleted = true WHERE id = ?")->execute([$technologiesOperationsId]);
+            $this->pdo->prepare("UPDATE ogt.operations_parameters SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
+            $this->pdo->prepare("UPDATE ogt.operations_jobs SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
+            $this->pdo->prepare("UPDATE ogt.operations_materials SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
+            
+            //лог
             $this->logger->logAction($this->userId, 'deleteOperation', $drawingsTechnologiesId, $technologiesOperationsId);
-
             return OgtHelper::GetResponseCode(200, $operation, $technology, 'deleteOperation');
         } catch (Exception $e) {
             $this->logger->logAction($this->userId, 'saveDataError', null, null, $e->getMessage());

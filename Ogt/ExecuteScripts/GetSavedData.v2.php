@@ -125,7 +125,8 @@ try {
                     'name', m.name,
                     'cnt', m.id,
                     'mass', om.material_mass
-                )) FILTER (WHERE m.id IS NOT NULL AND m.is_deleted = false) AS materials
+                ) ORDER BY m.id)
+                    FILTER (WHERE m.id IS NOT NULL AND m.is_deleted = false AND om.is_deleted = false) AS materials
                 FROM ogt.operations_parameters AS op
                 LEFT JOIN ogt.operations_materials AS om
                     ON op.technologies_operations_id = om.technologies_operations_id
