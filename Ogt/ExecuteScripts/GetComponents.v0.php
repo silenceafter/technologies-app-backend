@@ -55,31 +55,6 @@ $service = new PSQLService($data, $repository);
 if ($service == null && $repository == null)
     return;
 
-//соединение Ogt
-$conn = new PDO("pgsql:host=localhost;port=5432;dbname=OGT", 'postgres', 'bdw', array(PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION));
-$pdo = $conn;
-$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-//
-$db = DBHelper::GetDatabase($pdo);
-$db = trim(strtolower($db));
-
-//запрос к базе данных
-$data = new class($db, "schema", "table") {
-    public $db;
-    public $schema;
-    public $table;
-
-    function __construct($db, $schema, $table)
-    {
-        $this->db = $db;
-        $this->schema = $schema;
-        $this->table = $table;
-    }
-};
-
-$repository = new PSQLRepository($data, $pdo);
-$service = new PSQLService($data, $repository);
-
 //граница выборки
 $offset = ($params['page'] - 1) * $params['limit'];
 $range = $offset + $params['limit'];//$params['max'] + $params['limit']
@@ -90,11 +65,8 @@ try {
     if ($value == "") {
         //без поиска
         $text = "
-            SELECT
-                cnt,
-                ex_code AS code,
-                name
-            FROM ogt.\"drawings_view\"
+            SELECT *
+            FROM ogt.components_mv
             WHERE cnt > :params_max AND cnt <= :range
             ORDER BY cnt
             LIMIT :params_limit";
@@ -113,19 +85,19 @@ try {
                     *
                 FROM (
                     SELECT
-                        ex_code AS code,
+                        code,
                         name,
                         code_pos + name_pos + code_name_pos AS total
                     FROM (
                         SELECT *,
-                            POSITION(TRIM(UPPER(:value)) IN UPPER(CAST(ex_code AS TEXT))) AS code_pos,
+                            POSITION(TRIM(UPPER(:value)) IN UPPER(CAST(code AS TEXT))) AS code_pos,
                             POSITION(TRIM(UPPER(:value)) IN UPPER(name)) AS name_pos,
-                            POSITION(TRIM(UPPER(:value)) IN CAST(ex_code AS TEXT) || ' ' || UPPER(name)) AS code_name_pos
-                        FROM ogt.\"drawings_view\"
-                        WHERE CAST(ex_code AS TEXT) ILIKE '%' || :value || '%' OR
+                            POSITION(TRIM(UPPER(:value)) IN CAST(code AS TEXT) || ' ' || UPPER(name)) AS code_name_pos
+                        FROM ogt.components_mv
+                        WHERE CAST(code AS TEXT) ILIKE '%' || :value || '%' OR
                             name ILIKE '%' || :value || '%' OR
-                            CAST(ex_code AS TEXT) || ' ' || name ILIKE '%' || :value || '%'
-                    ) AS subquery
+                            CAST(code AS TEXT) || ' ' || name ILIKE '%' || :value || '%'
+                    )) AS subquery
                     WHERE code_pos > 0 OR name_pos > 0 OR code_name_pos > 0
                     ORDER BY total                                                      
                 ) AS result

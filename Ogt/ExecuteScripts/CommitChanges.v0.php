@@ -260,6 +260,30 @@ class TechnologyService {
                 }
             }
 
+            // 6. Вставляем комплектующие
+            $components = $operation['content']['formValues']['componentCode'] ?? [];
+            if (!empty($components)) {
+                $componentStmt = $this->pdo->prepare("
+                    INSERT INTO ogt.operations_components 
+                    (technologies_operations_id, component_code_id, quantity)
+                    VALUES (?, ?, ?)
+                ");
+                
+                foreach ($components as $component) {
+                    // Получаем ID комплектующего по коду и названию
+                    $componentId = OgtHelper::GetComponentId($this->pdo, $component['code'], $component['name']);
+                    
+                    if ($componentId) {
+                        // Вставляем комплектующее с количеством
+                        $componentStmt->execute([
+                            $technologiesOperationsId,
+                            $componentId,
+                            $component['quantity'] ?? 0
+                        ]);
+                    }
+                }
+            }
+
             // 5. Логируем
             $this->logger->logAction(
                 $this->userId,
@@ -478,6 +502,81 @@ class TechnologyService {
                 $updateStmt->execute([$material['id']]);
             }
 
+            // 4.6. Обработка комплектующих
+            $operationFormValues = $operation['content']['formValues'];
+            $formComponents = $operationFormValues['componentCode'] ?? [];
+            
+            // Получаем текущие комплектующие из БД (только активные)
+            $currentComponentsStmt = $this->pdo->prepare("
+                SELECT oc.id, oc.component_code_id, c.code, c.name, oc.quantity
+                FROM ogt.operations_components oc
+                JOIN ogt.components c ON oc.component_code_id = c.id
+                WHERE oc.technologies_operations_id = ? AND oc.is_deleted = false
+            ");
+            $currentComponentsStmt->execute([$technologiesOperationsId]);
+            $currentComponents = $currentComponentsStmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Создаем индекс текущих комплектующих по комбинации кода и наименования
+            $currentComponentsByCodeName = [];
+            foreach ($currentComponents as $component) {
+                $key = strtolower(trim($component['code'])) . '|' . strtolower(trim($component['name']));
+                $currentComponentsByCodeName[$key] = $component;
+            }
+            
+            // Обрабатываем комплектующие из formValues
+            foreach ($formComponents as $component) {
+                // Пропускаем комплектующие без кода или названия
+                if (empty($component['code']) || empty($component['name'])) {
+                    continue;
+                }                
+                //
+                $key = strtolower(trim($component['code'])) . '|' . strtolower(trim($component['name']));                
+                if (isset($currentComponentsByCodeName[$key])) {
+                    // Комплектующее уже существует, проверяем нужно ли обновить количество
+                    $currentComponent = $currentComponentsByCodeName[$key];
+                    $newQuantity = $component['quantity'] ?? 0;
+                    
+                    // Если количество изменилось, обновляем
+                    if ((int)$currentComponent['quantity'] !== (int)$newQuantity) {
+                        $updateStmt = $this->pdo->prepare("
+                            UPDATE ogt.operations_components
+                            SET quantity = ? 
+                            WHERE id = ?
+                        ");
+                        $updateStmt->execute([(int)$newQuantity, $currentComponent['id']]);
+                    }
+                    
+                    // Удаляем из индекса, чтобы потом определить удаленные комплектующие
+                    unset($currentComponentsByCodeName[$key]);
+                } else {
+                    // Новое комплектующее, добавляем
+                    $componentCodeId = OgtHelper::GetComponentId($this->pdo, $component['code'], $component['name']);
+                    
+                    if ($componentCodeId) {
+                        $insertStmt = $this->pdo->prepare("
+                            INSERT INTO ogt.operations_components
+                            (technologies_operations_id, component_code_id, quantity, is_deleted)
+                            VALUES (?, ?, ?, false)
+                        ");
+                        $insertStmt->execute([
+                            $technologiesOperationsId,
+                            $componentCodeId,
+                            $component['quantity'] ?? 0
+                        ]);
+                    }
+                }
+            }
+            
+            // Обрабатываем удаленные комплектующие
+            foreach ($currentComponentsByCodeName as $component) {
+                $updateStmt = $this->pdo->prepare("
+                    UPDATE ogt.operations_components
+                    SET is_deleted = true
+                    WHERE id = ?
+                ");
+                $updateStmt->execute([$component['id']]);
+            }
+
             // 5. Обновление даты
             $stmt = $this->pdo->prepare("
                 UPDATE ogt.technologies_users 
@@ -510,6 +609,7 @@ class TechnologyService {
             $this->pdo->prepare("UPDATE ogt.operations_parameters SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
             $this->pdo->prepare("UPDATE ogt.operations_jobs SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
             $this->pdo->prepare("UPDATE ogt.operations_materials SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
+            $this->pdo->prepare("UPDATE ogt.operations_components SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
             
             //лог
             $this->logger->logAction($this->userId, 'deleteOperation', $drawingsTechnologiesId, $technologiesOperationsId);

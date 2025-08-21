@@ -117,23 +117,39 @@ try {
       for($i = 0; $i < count($technologies); $i++)
       {
         $drawings_technologies_id = $response_array[$i]['drawings_technologies_id'];
-        $text = "WITH grouped_materials AS (
-            SELECT 
+        $text = "WITH grouped_components AS (
+            SELECT
                 op.technologies_operations_id,
                 jsonb_agg(json_build_object(
-                    'code', m.code,
-                    'name', m.name,
-                    'cnt', m.id,
-                    'mass', om.material_mass
-                ) ORDER BY m.id)
-                    FILTER (WHERE m.id IS NOT NULL AND m.is_deleted = false AND om.is_deleted = false) AS materials
+                    'code', c.code,
+                    'name', c.name,
+                    'cnt', c.id,
+                    'quantity', oc.quantity
+                ) ORDER BY c.id) FILTER (WHERE c.id IS NOT NULL AND c.is_deleted = false AND oc.is_deleted = false) AS components
                 FROM ogt.operations_parameters AS op
-                LEFT JOIN ogt.operations_materials AS om
-                    ON op.technologies_operations_id = om.technologies_operations_id
-                LEFT JOIN ogt.materials AS m
-                    ON om.material_code_id = m.id
+                LEFT JOIN ogt.operations_components AS oc
+                    ON op.technologies_operations_id = oc.technologies_operations_id
+                LEFT JOIN ogt.components AS c
+                    ON oc.component_code_id = c.id
                 GROUP BY op.technologies_operations_id
-            )
+            ),        
+            grouped_materials AS (
+                SELECT 
+                    op.technologies_operations_id,
+                    jsonb_agg(json_build_object(
+                        'code', m.code,
+                        'name', m.name,
+                        'cnt', m.id,
+                        'mass', om.material_mass
+                    ) ORDER BY m.id)
+                        FILTER (WHERE m.id IS NOT NULL AND m.is_deleted = false AND om.is_deleted = false) AS materials
+                    FROM ogt.operations_parameters AS op
+                    LEFT JOIN ogt.operations_materials AS om
+                        ON op.technologies_operations_id = om.technologies_operations_id
+                    LEFT JOIN ogt.materials AS m
+                        ON om.material_code_id = m.id
+                    GROUP BY op.technologies_operations_id
+                )
             /* grouped_equipment AS (
                 SELECT
                     op.technologies_operations_id,
@@ -189,7 +205,8 @@ try {
                 MIN(j.name) AS job_name,
                 /*ge.equipment,
                 gt.tooling*/
-                gm.materials
+                gm.materials,
+                gc.components
             FROM (
                 SELECT
                     id AS drawings_technologies_id
@@ -212,6 +229,8 @@ try {
                 ON gt.technologies_operations_id = op.technologies_operations_id*/
             LEFT JOIN grouped_materials AS gm
 		        ON gm.technologies_operations_id = op.technologies_operations_id
+            LEFT JOIN grouped_components AS gc
+	            ON gc.technologies_operations_id = op.technologies_operations_id
             WHERE top.is_deleted = false AND
                 op.is_deleted = false AND
                 oj.is_deleted = false AND				
@@ -221,7 +240,8 @@ try {
                 op.technologies_operations_id,
                 /*ge.equipment,
                 gt.tooling*/
-                gm.materials
+                gm.materials,
+                gc.components
 	        ORDER BY op.technologies_operations_id";
         //
         $query = $pdo->prepare($text);

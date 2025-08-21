@@ -3034,7 +3034,7 @@ class MUITreeItem /* для изделий */
         //вкладки
         $expandedPanels = [
             "parameters" => true,
-            "components" => false,
+            "components" => true,
             "equipment" => false,
             "materials" => true,
             "measuringTools" => false,
@@ -3068,6 +3068,14 @@ class MUITreeItem /* для изделий */
                 }, $materials)
                 : [];
 
+            //components
+            $components = json_decode($response_item['components'], true);
+            $componentCode = is_array($components)
+                ? array_map(function($item) {
+                    return (object) $item;
+                }, $components)
+                : [];
+
             //реквизиты
             $fields = [
                 "orderNumber" => $response_item['order_number'],
@@ -3094,7 +3102,8 @@ class MUITreeItem /* для изделий */
                 ],
                 "equipmentCode" => $equipmentCode,
                 "toolingCode" => $toolingCode,
-                "materialCode" => $materialCode
+                "materialCode" => $materialCode,
+                "componentCode" => $componentCode
             ];
 
             $response_item_technologies_operations_id = $response_item['technologies_operations_id'] + 1000; 
@@ -3435,11 +3444,28 @@ class OgtHelper
 
     public static function GetMaterialId($pdo, $code, $name)
     {
-        //получить id профессии     
+        //получить id
         try {
             $stmt = $pdo->prepare("
                 SELECT id 
                 FROM ogt.materials 
+                WHERE TRIM(UPPER(code)) = TRIM(UPPER(?)) 
+                AND TRIM(UPPER(name)) = TRIM(UPPER(?))
+            ");
+            $stmt->execute([$code, $name]);
+            return $stmt->fetchColumn();
+        } catch(Exception $e) {
+            return 0;
+        }   
+    }
+
+    public static function GetComponentId($pdo, $code, $name)
+    {
+        //получить id
+        try {
+            $stmt = $pdo->prepare("
+                SELECT id 
+                FROM ogt.components
                 WHERE TRIM(UPPER(code)) = TRIM(UPPER(?)) 
                 AND TRIM(UPPER(name)) = TRIM(UPPER(?))
             ");
