@@ -61,7 +61,7 @@ try {
         //без поиска
         $text = "
             SELECT *
-            FROM ogt.tooling_view
+            FROM ogt.tooling_mv
             WHERE cnt > :params_max AND cnt <= :range
             ORDER BY cnt
             LIMIT :params_limit";
@@ -88,12 +88,11 @@ try {
                                 POSITION(TRIM(UPPER(:value)) IN UPPER(CAST(code AS TEXT))) AS code_pos,
                                 POSITION(TRIM(UPPER(:value)) IN UPPER(name)) AS name_pos,
                                 POSITION(TRIM(UPPER(:value)) IN CAST(code AS TEXT) || ' ' || UPPER(name)) AS code_name_pos
-                            FROM ogt.tooling
-                            WHERE is_deleted = false AND (
-                                CAST(code AS TEXT) ILIKE '%' || :value || '%' OR
+                            FROM ogt.tooling_mv
+                            WHERE CAST(code AS TEXT) ILIKE '%' || :value || '%' OR
                                 name ILIKE '%' || :value || '%' OR
                                 CAST(code AS TEXT) || ' ' || name ILIKE '%' || :value || '%'
-                        )) AS subquery
+                        ) AS subquery
                         WHERE code_pos > 0 OR name_pos > 0 OR code_name_pos > 0
                         ORDER BY total
                     ) AS result

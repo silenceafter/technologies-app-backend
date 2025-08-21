@@ -149,7 +149,7 @@ try {
                     LEFT JOIN ogt.materials AS m
                         ON om.material_code_id = m.id
                     GROUP BY op.technologies_operations_id
-                )
+                ),
             /* grouped_equipment AS (
                 SELECT
                     op.technologies_operations_id,
@@ -164,23 +164,37 @@ try {
                 LEFT JOIN ogt.equipment AS e
                     ON oe.equipment_id = e.id
                 GROUP BY op.technologies_operations_id
-            ),
+            ),*/
             grouped_tooling AS (
                 SELECT
                     op.technologies_operations_id,
                     jsonb_agg(jsonb_build_object(
                         'code', t.code,
                         'name', t.name,
-                        'par', t.par,
-                        'id', t.id
-                    )) FILTER (WHERE t.id IS NOT NULL AND t.is_deleted != true) AS tooling
+                        'cnt', t.id
+                    ) ORDER BY t.id) FILTER (WHERE t.id IS NOT NULL AND t.is_deleted = false AND ot.is_deleted = false) AS tooling
                 FROM ogt.operations_parameters AS op
                 LEFT JOIN ogt.operations_tooling AS ot
                     ON op.technologies_operations_id = ot.technologies_operations_id
                 LEFT JOIN ogt.tooling AS t
-                    ON ot.tooling_id = t.id
+                    ON ot.tooling_code_id = t.id
+                GROUP BY op.technologies_operations_id	
+            ),
+            grouped_measuring_tools AS (
+                SELECT
+                    op.technologies_operations_id,
+                    jsonb_agg(jsonb_build_object(
+                        'code', mt.code,
+                        'name', mt.name,
+                        'cnt', mt.id
+                    ) ORDER BY mt.id) FILTER (WHERE mt.id IS NOT NULL AND mt.is_deleted = false AND omt.is_deleted = false) AS measuring_tools
+                FROM ogt.operations_parameters AS op
+                LEFT JOIN ogt.operations_measuring_tools AS omt
+                    ON op.technologies_operations_id = omt.technologies_operations_id
+                LEFT JOIN ogt.measuring_tools AS mt
+                    ON omt.measuring_tools_code_id = mt.id
                 GROUP BY op.technologies_operations_id
-            )*/
+            )
             SELECT
                 op.technologies_operations_id,
                 MIN(op.id) AS operations_parameters_id,
@@ -203,10 +217,11 @@ try {
                 MIN(j.id) AS job_id,
                 MIN(j.code) AS job_code,
                 MIN(j.name) AS job_name,
-                /*ge.equipment,
-                gt.tooling*/
+                /*ge.equipment,*/
+                gt.tooling,
                 gm.materials,
-                gc.components
+                gc.components,
+                gmt.measuring_tools
             FROM (
                 SELECT
                     id AS drawings_technologies_id
@@ -224,13 +239,15 @@ try {
             INNER JOIN ogt.jobs AS j
                 ON oj.job_code_id = j.id
             /*LEFT JOIN grouped_equipment AS ge
-                ON ge.technologies_operations_id = op.technologies_operations_id
+                ON ge.technologies_operations_id = op.technologies_operations_id*/
             LEFT JOIN grouped_tooling AS gt
-                ON gt.technologies_operations_id = op.technologies_operations_id*/
+                ON gt.technologies_operations_id = op.technologies_operations_id
             LEFT JOIN grouped_materials AS gm
 		        ON gm.technologies_operations_id = op.technologies_operations_id
             LEFT JOIN grouped_components AS gc
 	            ON gc.technologies_operations_id = op.technologies_operations_id
+            LEFT JOIN grouped_measuring_tools AS gmt
+	            ON gmt.technologies_operations_id = op.technologies_operations_id
             WHERE top.is_deleted = false AND
                 op.is_deleted = false AND
                 oj.is_deleted = false AND				
@@ -238,10 +255,11 @@ try {
                 j.is_deleted = false
             GROUP BY
                 op.technologies_operations_id,
-                /*ge.equipment,
-                gt.tooling*/
+                /*ge.equipment,*/
+                gt.tooling,
                 gm.materials,
-                gc.components
+                gc.components,
+                gmt.measuring_tools
 	        ORDER BY op.technologies_operations_id";
         //
         $query = $pdo->prepare($text);

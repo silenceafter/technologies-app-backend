@@ -284,6 +284,29 @@ class TechnologyService {
                 }
             }
 
+            // 7. Вставляем оснастку
+            $tooling = $operation['content']['formValues']['toolingCode'] ?? [];
+            if (!empty($tooling)) {
+                $toolingStmt = $this->pdo->prepare("
+                    INSERT INTO ogt.operations_tooling
+                    (technologies_operations_id, tooling_code_id)
+                    VALUES (?, ?)
+                ");
+                
+                foreach ($tooling as $item) {
+                    // Получаем ID оснастки по коду и названию
+                    $toolingId = OgtHelper::GetToolingId($this->pdo, $item['code'], $item['name']);
+                    
+                    if ($toolingId) {
+                        // Вставляем оснастку
+                        $toolingStmt->execute([
+                            $technologiesOperationsId,
+                            $toolingId
+                        ]);
+                    }
+                }
+            }
+
             // 5. Логируем
             $this->logger->logAction(
                 $this->userId,
@@ -577,6 +600,40 @@ class TechnologyService {
                 $updateStmt->execute([$component['id']]);
             }
 
+            // 4.7. Обработка оснастки
+            $operationFormValues = $operation['content']['formValues'];
+            $formTooling = $operationFormValues['toolingCode'] ?? [];
+
+            // 1. Помечаем ВСЕ текущие записи как удаленные
+            $deleteStmt = $this->pdo->prepare("
+                UPDATE ogt.operations_tooling
+                SET is_deleted = true
+                WHERE technologies_operations_id = ? AND is_deleted = false
+            ");
+            $deleteStmt->execute([$technologiesOperationsId]);
+
+            // 2. Добавляем ВСЕ записи из формы как активные
+            $insertStmt = $this->pdo->prepare("
+                INSERT INTO ogt.operations_tooling
+                (technologies_operations_id, tooling_code_id, is_deleted)
+                VALUES (?, ?, false)
+            ");
+
+            foreach ($formTooling as $tooling) {
+                // Пропускаем оснастку без кода или названия
+                if (empty($tooling['code']) || empty($tooling['name'])) {
+                    continue;
+                }
+                
+                $toolingCodeId = OgtHelper::GetToolingId($this->pdo, $tooling['code'], $tooling['name']);
+                if ($toolingCodeId) {
+                    $insertStmt->execute([
+                        $technologiesOperationsId,
+                        $toolingCodeId
+                    ]);
+                }
+            }
+
             // 5. Обновление даты
             $stmt = $this->pdo->prepare("
                 UPDATE ogt.technologies_users 
@@ -610,6 +667,7 @@ class TechnologyService {
             $this->pdo->prepare("UPDATE ogt.operations_jobs SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
             $this->pdo->prepare("UPDATE ogt.operations_materials SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
             $this->pdo->prepare("UPDATE ogt.operations_components SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
+            $this->pdo->prepare("UPDATE ogt.operations_tooling SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
             
             //лог
             $this->logger->logAction($this->userId, 'deleteOperation', $drawingsTechnologiesId, $technologiesOperationsId);

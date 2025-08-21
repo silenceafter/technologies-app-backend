@@ -3037,8 +3037,8 @@ class MUITreeItem /* для изделий */
             "components" => true,
             "equipment" => false,
             "materials" => true,
-            "measuringTools" => false,
-            "tooling" => false
+            "measuringTools" => true,
+            "tooling" => true
         ];        
 
         //операции
@@ -3076,6 +3076,14 @@ class MUITreeItem /* для изделий */
                 }, $components)
                 : [];
 
+            //measuring_tools
+            $measuringTools = json_decode($response_item['measuring_tools'], true);
+            $measuringToolsCode = is_array($measuringTools)
+                ? array_map(function($item) {
+                    return (object) $item;
+                }, $measuringTools)
+                : [];
+
             //реквизиты
             $fields = [
                 "orderNumber" => $response_item['order_number'],
@@ -3103,7 +3111,8 @@ class MUITreeItem /* для изделий */
                 "equipmentCode" => $equipmentCode,
                 "toolingCode" => $toolingCode,
                 "materialCode" => $materialCode,
-                "componentCode" => $componentCode
+                "componentCode" => $componentCode,
+                "measuringToolsCode" => $measuringToolsCode
             ];
 
             $response_item_technologies_operations_id = $response_item['technologies_operations_id'] + 1000; 
@@ -3466,6 +3475,23 @@ class OgtHelper
             $stmt = $pdo->prepare("
                 SELECT id 
                 FROM ogt.components
+                WHERE TRIM(UPPER(code)) = TRIM(UPPER(?)) 
+                AND TRIM(UPPER(name)) = TRIM(UPPER(?))
+            ");
+            $stmt->execute([$code, $name]);
+            return $stmt->fetchColumn();
+        } catch(Exception $e) {
+            return 0;
+        }   
+    }
+
+    public static function GetToolingId($pdo, $code, $name)
+    {
+        //получить id
+        try {
+            $stmt = $pdo->prepare("
+                SELECT id 
+                FROM ogt.tooling
                 WHERE TRIM(UPPER(code)) = TRIM(UPPER(?)) 
                 AND TRIM(UPPER(name)) = TRIM(UPPER(?))
             ");
