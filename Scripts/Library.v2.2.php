@@ -3502,6 +3502,23 @@ class OgtHelper
         }   
     }
 
+    public static function GetMeasuringToolsId($pdo, $code, $name)
+    {
+        //получить id
+        try {
+            $stmt = $pdo->prepare("
+                SELECT id 
+                FROM ogt.measuring_tools
+                WHERE TRIM(UPPER(code)) = TRIM(UPPER(?)) 
+                AND TRIM(UPPER(name)) = TRIM(UPPER(?))
+            ");
+            $stmt->execute([$code, $name]);
+            return $stmt->fetchColumn();
+        } catch(Exception $e) {
+            return 0;
+        }   
+    }
+
     /*public static function GetUserAccess($user, $taskStatusId, $GID)
     {
         if (!$user) { return null; }

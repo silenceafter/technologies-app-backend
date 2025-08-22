@@ -8,7 +8,7 @@ header('Access-Control-Allow-Credentials: true');*/
 require_once($_SERVER['DOCUMENT_ROOT']."/IVC/coreX.php");
 require_once $_SERVER['DOCUMENT_ROOT']."/IVC/Scripts/Library.v2.2.php";
 require_once $_SERVER['DOCUMENT_ROOT']."/IVC/Composer/vendor/autoload.php";
-//create_products_data_tree
+//get_products
 
 $response = null;
 //получить соединение
@@ -41,15 +41,14 @@ $data = new class($db, "schema", "table") {
 };
 
 //данные
-$values = array("search" => $_GET['search'], "limit" => $_GET['limit'], "page" => $_GET['page']);
+$postData = file_get_contents('php://input');
+$data_object = json_decode($postData, true);
+//
+$values = array("search" => $data_object['drawing']['externalcode'], "limit" => $data_object['limit'], "page" => $data_object['page']);
 
 //основные параметры
 $schema = "importer";
-
-//json
-$jsonContent = file_get_contents("tables.v2.json");
-$tables = json_decode($jsonContent, true);
-$table = $tables[3]['name'];
+$table = "";
 
 //запрос к базе данных
 $data = new class($db, $schema, $table) {
@@ -82,26 +81,7 @@ function GetMoreInfo($pdo, $params)
 
     try {
         //список drawings
-        if (trim($params['search'] == "")) {
-            //без поиска
-            $text = "
-                SELECT
-                    cnt,
-                    nizd,
-                    mod,
-                    kudar AS external_code,
-                    naim
-                FROM importer.\"m10870_view_dev\"
-                WHERE TRIM(nizd) != '' AND 
-                    cnt > :params_max AND cnt <= :range
-                ORDER BY cnt
-                LIMIT :params_limit";
-            //
-            $query = $pdo->prepare($text);
-            $query->bindValue(':params_limit', $params['limit']);
-            $query->bindValue(':params_max', $offset);
-            $query->bindValue(':range', $range);
-        } else {
+        if (trim($params['search'])) {            
             //поиск
             $text = "
                 SELECT *
@@ -112,21 +92,21 @@ function GetMoreInfo($pdo, $params)
                         SUBSTR(nizd,11,3) AS mod,
                         (
                             SELECT kudar
-                            FROM importer.\"m10870_view\"
+                            FROM importer.m10870_view
                             WHERE TRIM(UPPER(nizd)) = TRIM(UPPER(SUBSTR(subquery.nizd,1,10))) AND
                                 TRIM(UPPER(mod)) = TRIM(UPPER(SUBSTR(subquery.nizd,11,3)))
                             LIMIT 1
                         ) AS external_code,
                         (
                             SELECT naim
-                            FROM importer.\"m10870_view\"
+                            FROM importer.m10870_view
                             WHERE TRIM(UPPER(nizd)) = TRIM(UPPER(SUBSTR(subquery.nizd,1,10))) AND
                                 TRIM(UPPER(mod)) = TRIM(UPPER(SUBSTR(subquery.nizd,11,3)))
                             LIMIT 1
                         ) AS naim
                     FROM (
                         SELECT nizd
-                        FROM importer.\"pm10201_view\"
+                        FROM importer.pm10201_view
                         WHERE TRIM(UPPER(chtr)) = :search
                         GROUP BY nizd
                     ) AS subquery

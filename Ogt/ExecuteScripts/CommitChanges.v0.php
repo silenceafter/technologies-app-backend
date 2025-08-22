@@ -307,6 +307,29 @@ class TechnologyService {
                 }
             }
 
+            // 8. Вставляем измерительные инструменты
+            $measuringTools = $operation['content']['formValues']['measuringToolsCode'] ?? [];
+            if (!empty($measuringTools)) {
+                $measuringToolsStmt = $this->pdo->prepare("
+                    INSERT INTO ogt.operations_measuring_tools
+                    (technologies_operations_id, measuring_tools_code_id)
+                    VALUES (?, ?)
+                ");
+                
+                foreach ($measuringTools as $measuring_tool) {
+                    // Получаем ID инструмента по коду и названию
+                    $measuringToolsId = OgtHelper::GetMeasuringToolsId($this->pdo, $measuring_tool['code'], $measuring_tool['name']);
+                    
+                    if ($measuringToolsId) {
+                        // Вставляем инструмент
+                        $measuringToolsStmt->execute([
+                            $technologiesOperationsId,
+                            $measuringToolsId
+                        ]);
+                    }
+                }
+            }
+
             // 5. Логируем
             $this->logger->logAction(
                 $this->userId,
@@ -634,6 +657,40 @@ class TechnologyService {
                 }
             }
 
+            // 4.8. Обработка инструментов
+            $operationFormValues = $operation['content']['formValues'];
+            $formMeasuringTools = $operationFormValues['measuringToolsCode'] ?? [];
+
+            // 1. Помечаем ВСЕ текущие записи как удаленные
+            $deleteStmt = $this->pdo->prepare("
+                UPDATE ogt.operations_measuring_tools
+                SET is_deleted = true
+                WHERE technologies_operations_id = ? AND is_deleted = false
+            ");
+            $deleteStmt->execute([$technologiesOperationsId]);
+
+            // 2. Добавляем ВСЕ записи из формы как активные
+            $insertStmt = $this->pdo->prepare("
+                INSERT INTO ogt.operations_measuring_tools
+                (technologies_operations_id, measuring_tools_code_id, is_deleted)
+                VALUES (?, ?, false)
+            ");
+
+            foreach ($formMeasuringTools as $measuringTool) {
+                // Пропускаем оснастку без кода или названия
+                if (empty($measuringTool['code']) || empty($measuringTool['name'])) {
+                    continue;
+                }
+                
+                $measuringToolsCodeId = OgtHelper::GetMeasuringToolsId($this->pdo, $measuringTool['code'], $measuringTool['name']);
+                if ($measuringToolsCodeId) {
+                    $insertStmt->execute([
+                        $technologiesOperationsId,
+                        $measuringToolsCodeId
+                    ]);
+                }
+            }
+
             // 5. Обновление даты
             $stmt = $this->pdo->prepare("
                 UPDATE ogt.technologies_users 
@@ -668,6 +725,7 @@ class TechnologyService {
             $this->pdo->prepare("UPDATE ogt.operations_materials SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
             $this->pdo->prepare("UPDATE ogt.operations_components SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
             $this->pdo->prepare("UPDATE ogt.operations_tooling SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
+            $this->pdo->prepare("UPDATE ogt.operations_measuring_tools SET is_deleted = true WHERE technologies_operations_id = ?")->execute([$technologiesOperationsId]);
             
             //лог
             $this->logger->logAction($this->userId, 'deleteOperation', $drawingsTechnologiesId, $technologiesOperationsId);
