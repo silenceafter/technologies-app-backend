@@ -117,7 +117,7 @@ try {
       for($i = 0; $i < count($technologies); $i++)
       {
         $drawings_technologies_id = $response_array[$i]['drawings_technologies_id'];
-        $text = "WITH grouped_components AS (
+        /*$text = "WITH grouped_components AS (
             SELECT
                 op.technologies_operations_id,
                 jsonb_agg(json_build_object(
@@ -150,21 +150,6 @@ try {
                         ON om.material_code_id = m.id
                     GROUP BY op.technologies_operations_id
                 ),
-            /* grouped_equipment AS (
-                SELECT
-                    op.technologies_operations_id,
-                    jsonb_agg(jsonb_build_object(
-                        'name', e.name,
-                        'type', e.type,
-                        'id', e.id
-                    )) FILTER (WHERE e.id IS NOT NULL AND e.is_deleted != true) AS equipment
-                FROM ogt.operations_parameters AS op
-                LEFT JOIN ogt.operations_equipment AS oe
-                    ON op.technologies_operations_id = oe.technologies_operations_id
-                LEFT JOIN ogt.equipment AS e
-                    ON oe.equipment_id = e.id
-                GROUP BY op.technologies_operations_id
-            ),*/
             grouped_tooling AS (
                 SELECT
                     op.technologies_operations_id,
@@ -204,7 +189,6 @@ try {
                 MIN((top.is_deleted)::INT)::BOOLEAN AS is_deleted,
                 MIN(o.code) AS label,
                 MIN(o.name) AS secondarylabel,
-                --op.order_number AS op_order_number,	
                 MIN(op.shop_number) AS op_shop_number,
                 MIN(op.area_number) AS op_area_number,
                 MIN(op.document) AS op_document,
@@ -217,7 +201,6 @@ try {
                 MIN(j.id) AS job_id,
                 MIN(j.code) AS job_code,
                 MIN(j.name) AS job_name,
-                /*ge.equipment,*/
                 gt.tooling,
                 gm.materials,
                 gc.components,
@@ -238,8 +221,6 @@ try {
                 ON op.technologies_operations_id = oj.technologies_operations_id
             INNER JOIN ogt.jobs AS j
                 ON oj.job_code_id = j.id
-            /*LEFT JOIN grouped_equipment AS ge
-                ON ge.technologies_operations_id = op.technologies_operations_id*/
             LEFT JOIN grouped_tooling AS gt
                 ON gt.technologies_operations_id = op.technologies_operations_id
             LEFT JOIN grouped_materials AS gm
@@ -255,17 +236,91 @@ try {
                 j.is_deleted = false
             GROUP BY
                 op.technologies_operations_id,
-                /*ge.equipment,*/
                 gt.tooling,
                 gm.materials,
                 gc.components,
                 gmt.measuring_tools
-	        ORDER BY op.technologies_operations_id";
+	        ORDER BY op.technologies_operations_id";*/
+        
+        $text = "SELECT DISTINCT ON (op.technologies_operations_id)
+                op.technologies_operations_id,
+                op.id AS operations_parameters_id,
+                oj.id AS operations_jobs_id,                
+                top.operation_id AS operation_id,
+                top.order_number AS order_number,
+                (top.is_deleted)::BOOLEAN AS is_deleted,
+                o.code AS label,
+                o.name AS secondarylabel,	
+                op.shop_number AS op_shop_number,
+                op.area_number AS op_area_number,
+                op.document AS op_document,
+                op.description AS operation_description,
+                oj.grade AS oj_grade,
+                oj.working_conditions AS oj_working_conditions,
+                oj.number_of_workers AS oj_number_of_workers,
+                oj.number_of_processed_parts AS oj_number_of_processed_parts,
+                oj.labor_effort AS oj_labor_effort,
+                j.id AS job_id,
+                j.code AS job_code,
+                j.name AS job_name
+            FROM (
+                SELECT
+                    id AS drawings_technologies_id
+                FROM ogt.drawings_technologies AS dt
+                WHERE id = :drawings_technologies_id AND is_deleted = false
+            ) AS dtj
+            INNER JOIN ogt.technologies_operations AS top
+                ON dtj.drawings_technologies_id = top.drawings_technologies_id
+            INNER JOIN ogt.operations AS o
+                ON top.operation_id = o.id
+            INNER JOIN ogt.operations_parameters AS op
+                ON top.id = op.technologies_operations_id
+            INNER JOIN ogt.operations_jobs AS oj
+                ON op.technologies_operations_id = oj.technologies_operations_id
+            INNER JOIN ogt.jobs AS j
+                ON oj.job_code_id = j.id
+            WHERE top.is_deleted = false AND
+                op.is_deleted = false AND
+                oj.is_deleted = false AND				
+                o.is_deleted = false AND
+                j.is_deleted = false
+
+            ORDER BY op.technologies_operations_id, op.id";
         //
         $query = $pdo->prepare($text);
         $query->bindValue(':drawings_technologies_id', $drawings_technologies_id);
         $query->execute();
         $response_array_o = $query->fetchAll(PDO::FETCH_ASSOC);
+
+        //добавить дополнительные данные
+        foreach($response_array_o as $response_item)
+        {
+            //components
+            $text = "
+                SELECT
+                    c.id AS cnt,
+                    c.code,
+                    c.name,
+                    oc.quantity
+                FROM ogt.operations_parameters AS op
+                LEFT JOIN ogt.operations_components AS oc
+                    ON op.technologies_operations_id = oc.technologies_operations_id
+                LEFT JOIN ogt.components AS c
+                    ON oc.component_code_id = c.id
+                WHERE op.technologies_operations_id = :technologies_operations_id AND 
+                    c.is_deleted = false AND 
+                    oc.is_deleted = false
+                ORDER BY c.id";
+            //
+            $query = $pdo->prepare($text);
+            $query->bindValue(':technologies_operations_id', $response_item['technologies_operations_id']);
+            $query->execute();
+            $response_array_components = $query->fetchAll(PDO::FETCH_ASSOC);
+            $response_item['components'] = json_encode($response_array_components, JSON_UNESCAPED_UNICODE);
+        }
+
+        
+
         $technologies[$i] = MUITreeItem::GetCustomTreeItemsOperations($response_array_o, $technologies[$i]);
       }
     }
