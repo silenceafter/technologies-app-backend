@@ -3045,7 +3045,8 @@ class MUITreeItem /* для изделий */
         foreach($response_array as $response_item)
         {   
             //equipment
-            $equipment = json_decode($response_item['equipment'], true);
+            //$equipment = json_decode($response_item['equipment'], true);
+            $equipment = null; //$response_item['components'];
             $equipmentCode = is_array($equipment)
                 ? array_map(function($item) {
                     return (object) $item;
@@ -3053,7 +3054,8 @@ class MUITreeItem /* для изделий */
                 : [];
 
             //tooling
-            $tooling = json_decode($response_item['tooling'], true);
+            //$tooling = json_decode($response_item['tooling'], true);
+            $tooling = $response_item['tooling'];
             $toolingCode = is_array($tooling)
                 ? array_map(function($item) {
                     return (object) $item;
@@ -3061,7 +3063,8 @@ class MUITreeItem /* для изделий */
                 : [];
 
             //materials
-            $materials = json_decode($response_item['materials'], true);
+            //$materials = json_decode($response_item['materials'], true);
+            $materials = $response_item['materials'];
             $materialCode = is_array($materials)
                 ? array_map(function($item) {
                     return (object) $item;
@@ -3069,7 +3072,8 @@ class MUITreeItem /* для изделий */
                 : [];
 
             //components
-            $components = json_decode($response_item['components'], true);
+            //$components = json_decode($response_item['components'], true);
+            $components = $response_item['components'];
             $componentCode = is_array($components)
                 ? array_map(function($item) {
                     return (object) $item;
@@ -3077,7 +3081,8 @@ class MUITreeItem /* для изделий */
                 : [];
 
             //measuring_tools
-            $measuringTools = json_decode($response_item['measuring_tools'], true);
+            //$measuringTools = json_decode($response_item['measuring_tools'], true);
+            $measuringTools = $response_item['measuring_tools'];
             $measuringToolsCode = is_array($measuringTools)
                 ? array_map(function($item) {
                     return (object) $item;
