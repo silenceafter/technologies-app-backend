@@ -54,7 +54,6 @@ try {
     $userId = SystemHelper::decrypt($uid, $keyHex, $ivHex);
 
     //sql
-    $service->BeginTransaction();
     $text = "
         SELECT *
         FROM (
@@ -340,7 +339,9 @@ try {
         
         // 2. Проверяем, есть ли ID для запроса
         if (empty($intIds)) {
-            return $technologies;
+            //return $technologies;
+            echo json_encode($technologies, JSON_UNESCAPED_UNICODE);
+            exit();
         }
         
         // 3. Создаем placeholders для запроса
@@ -400,7 +401,8 @@ try {
         
         // 6. Если операций нет, возвращаем технологии без изменений
         if (empty($response_array_o)) {
-            return $technologies;
+            echo json_encode($technologies, JSON_UNESCAPED_UNICODE);
+            exit();
         }
         
         // 7. Собираем все ID операций для подзапросов
@@ -567,7 +569,7 @@ try {
             // Добавляем компоненты к операции
             $operation['components'] = $componentsByOperation[$operation['technologies_operations_id']] ?? null;
             $operation['materials'] = $materialsByOperation[$operation['technologies_operations_id']] ?? null;
-            $operation['tooling'] = $measuringToolsByOperation[$operation['technologies_operations_id']] ?? null;
+            $operation['tooling'] = $toolingByOperation[$operation['technologies_operations_id']] ?? null;
             $operation['measuring_tools'] = $measuringToolsByOperation[$operation['technologies_operations_id']] ?? null;
             //            
             $operationsByTechnology[$techId][] = $operation;
@@ -584,9 +586,7 @@ try {
     }
     //
     $response = $technologies;
-    $service->CommitTransaction();
 } catch (Exception $e) {
-    $service->RollbackTransaction('');
 }
 echo json_encode($response, JSON_UNESCAPED_UNICODE);
 
