@@ -61,20 +61,20 @@ $range = $offset + $params['limit'];//$params['max'] + $params['limit']
 
 //sql
 try {
-    $service->BeginTransaction();
-    if ($value == "") {
+    /*if ($value == "") {
         //без поиска
+        $paramsLimitPlusOne = $params['limit'] + 1;
         $text = "
             SELECT *
             FROM ogt.operations_mv
-            WHERE cnt > :params_max AND cnt <= :range
+            --WHERE cnt > :params_max AND cnt <= :range
             ORDER BY cnt
-            LIMIT :params_limit";
+            LIMIT :params_limit OFFSET :params_max";
         //
         $query = $pdo->prepare($text);
-        $query->bindValue(':params_limit', $params['limit']);
+        $query->bindValue(':params_limit', $paramsLimitPlusOne);
         $query->bindValue(':params_max', $offset);
-        $query->bindValue(':range', $range);
+        //$query->bindValue(':range', $range);
     } else {
         //с поиском             
         $text = "
@@ -115,26 +115,39 @@ try {
     }
     //
     $query->execute();
-    $response_array = $query->fetchAll(PDO::FETCH_ASSOC);
-    //
-    $response = new class("table", $response_array) {
-        public $table;
-        public $data;
+    $response_array = $query->fetchAll(PDO::FETCH_ASSOC);*/
 
-        function __construct(
-            $table, 
-            $data
-            )
-        {
-            $this->table = $table;
-            $this->data = $data;
-        }
-    };
+    $paramsLimitPlusOne = $params['limit'] + 1;
+    $text = "
+        SELECT *
+        FROM ogt.operations_mv
+        WHERE (code ILIKE :value OR name ILIKE :value)
+        LIMIT :params_limit OFFSET :params_max";
+    //
+    $query = $pdo->prepare($text);
+    $query->bindValue(':value', '%' . $value . '%');
+    $query->bindValue(':params_limit', $paramsLimitPlusOne);
+    $query->bindValue(':params_max', $offset);
+    //
+    $query->execute();
+    $response_array = $query->fetchAll(PDO::FETCH_ASSOC);
+
+    //есть ли еще записи
+    $hasMore = count($response_array) > $params['limit'];
+    if ($hasMore) {
+        array_pop($response_array);
+    }
+    //
+    $response = (object) [
+        "table" => "table",
+        "data" => $response_array,
+        "hasMore" => $hasMore,
+        "page" => $params['page'],
+        "search" => $value
+    ];
 
     $response = json_encode($response, JSON_UNESCAPED_UNICODE);
-    $service->CommitTransaction();
 } catch (Exception $e) {
-    $service->RollbackTransaction('');
 }
 
 header('Content-Type: application/json');
