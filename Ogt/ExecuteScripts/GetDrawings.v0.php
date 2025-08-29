@@ -91,14 +91,15 @@ try {
                 internal_code AS internalCode,
                 name
             FROM ogt.drawings_mv
-            WHERE cnt > :params_max AND cnt <= :range
+            WHERE external_code ILIKE '%БЦЖИ%' AND TRIM(name) != '' /*AND
+                cnt > :params_max AND cnt <= :range*/
             ORDER BY cnt
             LIMIT :params_limit";
         //
         $query = $pdo->prepare($text);
         $query->bindValue(':params_limit', $params['limit']);
-        $query->bindValue(':params_max', $offset);//$params['max']
-        $query->bindValue(':range', $range);
+        /*$query->bindValue(':params_max', $offset);
+        $query->bindValue(':range', $range);*/
     } else {
         //с поиском
         $text = "

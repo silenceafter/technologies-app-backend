@@ -45,6 +45,7 @@ class Logger {
             $stmt->execute([$actionId, $value, $userId, $technologiesOperationsId, $drawingsTechnologiesId]);
         } catch (Exception $e) {
             // Логируем, но не прерываем выполнение
+            $gg = 1;
         }
     }
 }
@@ -111,13 +112,12 @@ class TechnologyService {
             // 6. Создаём операции
             $response = [];
             foreach ($technology['children'] as $operation) {
-                if ($operation['content']['isNewRecord']) {
+                if ($operation['content']['isNewRecord'] && !$operation['content']['isDeleted']) {
                     $response[] = $this->createOperation($operation, $drawingsTechnologiesId);
                 }
             }
-
+            //
             $this->logger->logAction($this->userId, 'createTechnology', $drawingsTechnologiesId);
-
             return ['status' => 'created', 'id' => $technologyId];
         } catch (Exception $e) {
             $this->logger->logAction($this->userId, 'saveDataError', null, null, $e->getMessage());
@@ -330,14 +330,14 @@ class TechnologyService {
                 }
             }
 
-            // 5. Логируем
+            // 9. Логируем
             $this->logger->logAction(
                 $this->userId,
                 'createOperation',
                 $drawingsTechnologiesId,
                 $technologiesOperationsId
             );
-
+            //
             return ['status' => 'created', 'id' => $technologiesOperationsId];
         } catch (Exception $e) {
             $this->logger->logAction(
@@ -347,7 +347,8 @@ class TechnologyService {
                 $technologiesOperationsId,
                 $e->getMessage()
             );
-            return OgtHelper::GetResponseCode(500, $operation, $technology, 'createOperation');
+            throw new Exception("Ошибка создания операции: " . $e->getMessage(), 0, $e);
+            //return OgtHelper::GetResponseCode(500, $operation, $technology, 'createOperation');
         }
     }
 
@@ -704,7 +705,8 @@ class TechnologyService {
             return OgtHelper::GetResponseCode(200, $operation, $technology, 'updateOperation');
         } catch (Exception $e) {
             $this->logger->logAction($this->userId, 'saveDataError', $drawingsTechnologiesId, $technologiesOperationsId, $e->getMessage());
-            return OgtHelper::GetResponseCode(500, $operation, $technology, 'updateOperation');
+            throw new Exception("Ошибка обновления операции: " . $e->getMessage(), 0, $e);
+            //return OgtHelper::GetResponseCode(500, $operation, $technology, 'updateOperation');
         }
     }
 
@@ -732,7 +734,8 @@ class TechnologyService {
             return OgtHelper::GetResponseCode(200, $operation, $technology, 'deleteOperation');
         } catch (Exception $e) {
             $this->logger->logAction($this->userId, 'saveDataError', null, null, $e->getMessage());
-            return OgtHelper::GetResponseCode(500, $operation, $technology, 'deleteOperation');
+            throw new Exception("Ошибка удаления операции: " . $e->getMessage(), 0, $e);
+            //return OgtHelper::GetResponseCode(500, $operation, $technology, 'deleteOperation');
         }
     }
 }
@@ -778,11 +781,11 @@ try {
 
     // === Обработка ===
     foreach ($technologies as $technology) {
-        if ($technology['content']['isNewRecord']) {
+        if ($technology['content']['isNewRecord'] && !$technology['content']['isDeleted']) {
             $response[] = $techService->createTechnology($technology);
         } elseif ($technology['content']['isDeleted']) {
             $response[] = $techService->deleteTechnology($technology);
-        } else { /* if ($technology['content']['isUpdated']) */
+        } else {
             $response[] = $techService->updateTechnology($technology);
         }
     }
